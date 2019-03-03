@@ -17,6 +17,7 @@
 package com.auxilium.hack;
 
 import android.Manifest;
+import android.arch.lifecycle.ViewModelProviders;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
@@ -39,6 +40,7 @@ import android.view.MotionEvent;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.firebase.ui.auth.AuthUI;
 import com.google.ar.core.Anchor;
 import com.google.ar.core.ArCoreApk;
 import com.google.ar.core.Camera;
@@ -51,11 +53,13 @@ import com.google.ar.core.PointCloud;
 import com.google.ar.core.Session;
 import com.google.ar.core.Trackable;
 import com.google.ar.core.TrackingState;
+
 import com.auxilium.hack.common.helpers.CameraPermissionHelper;
 import com.auxilium.hack.common.helpers.DisplayRotationHelper;
 import com.auxilium.hack.common.helpers.FullScreenHelper;
 import com.auxilium.hack.common.helpers.SnackbarHelper;
 import com.auxilium.hack.common.helpers.TapHelper;
+
 import com.google.ar.core.examples.java.common.rendering.BackgroundRenderer;
 import com.google.ar.core.examples.java.common.rendering.ObjectRenderer;
 import com.google.ar.core.examples.java.common.rendering.ObjectRenderer.BlendMode;
@@ -68,11 +72,21 @@ import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
 import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
 
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.FirebaseOptions;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.Query;
+import com.google.firebase.firestore.FirebaseFirestore;
+
+
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
+
+
 
 /**
  * This is a simple example that shows how to create an augmented reality (AR) application using the
@@ -96,6 +110,11 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     private float[] mGravity = new float[3];
     private float[] mGeometric = new float[3];
     private float azimuth = 0f;
+
+    private boolean isSigningIn = false;
+
+   private FirebaseFirestore db;
+   private  Query mQuery;
 
     private final BackgroundRenderer backgroundRenderer = new BackgroundRenderer();
     private final ObjectRenderer virtualObject = new ObjectRenderer();
@@ -127,17 +146,24 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
     private final ArrayList<ColoredAnchor> anchors = new ArrayList<>();
 
+    private boolean shouldStartSignIn() {
+        return ( FirebaseAuth.getInstance().getCurrentUser() == null&&!isSigningIn);
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         setContentView(R.layout.activity_main);
         surfaceView = findViewById(R.id.surfaceview);
+
         displayRotationHelper = new DisplayRotationHelper(/*context=*/ this);
 
         // Set up tap listener.
         tapHelper = new TapHelper(/*context=*/ this);
         surfaceView.setOnTouchListener(tapHelper);
+        lat = 0;
+        lon = 0;
 
         // Set up renderer.
         surfaceView.setPreserveEGLContextOnPause(true);
@@ -187,6 +213,15 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 
     }
 
+    @Override
+    public void onStart(){
+        super.onStart();
+        // Start sign in if necessary
+        if (shouldStartSignIn()) {
+            startSignIn();
+            return;
+        }
+    }
 
 
     @Override
@@ -467,6 +502,18 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
                 //Do something.
             }
         }
+    }
+
+    private void startSignIn() {
+        // Sign in with FirebaseUI
+        Intent intent = AuthUI.getInstance().createSignInIntentBuilder()
+                .setAvailableProviders(Collections.singletonList(
+                        new AuthUI.IdpConfig.EmailBuilder().build()))
+                .setIsSmartLockEnabled(false)
+                .build();
+
+        startActivityForResult(intent, 9001);
+        isSigningIn= true;
     }
 
     @Override
